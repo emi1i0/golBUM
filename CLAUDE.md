@@ -50,6 +50,10 @@ tools/
   La pelota arranca en +Z y avanza hacia -Z. `y` es la altura.
 - **Cámara:** seguimiento suave con `lerp` (no OrbitControls). Offset y suavidad en
   `config.js` (`CAMERA_OFFSET`, `CAMERA_LERP`). `sacudida` da el "camera shake" del gol.
+- **Movimiento con inercia:** la pelota NO se mueve a velocidad instantánea. Mantiene
+  una velocidad (`velX`/`velZ`) que tiende a la deseada con suavizado exponencial
+  (`1 - e^(-ritmo·dt)`, independiente de FPS): acelera con `BALL_ACCEL` al haber input
+  y frena con `BALL_FRICTION` al soltar (glide). `BALL_SPEED` es el tope de velocidad.
 - **Detección de pases:** por distancia en XZ contra el compañero objetivo
   (`INFLUENCE_RADIUS`), no hay motor de física. El tiro final y la detección de gol
   también son cinemática simple + chequeo de línea de gol.
@@ -75,9 +79,10 @@ tools/
   es `{ nombre, time, ballStart, teammates, obstacles, rivals }`; el ÚLTIMO teammate es
   el delantero. No hace falta tocar la lógica: se reconstruye todo por nivel.
 - **Calcular el `time` de cada nivel:** NO ponerlo a ojo. Correr `node tools/sim-tiempos.mjs`,
-  que simula un run óptimo y sugiere `time = óptimo × 1.7` (factor de "jugador promedio").
+  que simula un run óptimo (con inercia y estamina) y sugiere `time = óptimo × FACTOR`.
+  El `FACTOR` está en `1.3` (afinado por playtesting: deja ~2s de colchón sobre el óptimo).
   Tras cambiar posiciones/obstáculos/rivales de un nivel, volver a correrlo y copiar el
-  valor sugerido al `time` del nivel.
+  valor sugerido al `time` del nivel. Cambiar el `FACTOR` reajusta la dificultad global.
 - **Velocidades, cámara, tamaño de cancha, arco:** constantes en `config.js`.
 - **Nuevos efectos de sonido:** agregar funciones en `sounds.js` usando los helpers
   `tono()` / `ruido()`; llamarlas desde las transiciones de estado en `main.js`.
