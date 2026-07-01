@@ -1,0 +1,225 @@
+/* Reset básico */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0b12;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  user-select: none;
+}
+
+#escena {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ===================== HUD ===================== */
+
+/* El contador gigante, centrado arriba */
+#temporizador {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  line-height: 1;
+  pointer-events: none;
+  z-index: 10;
+  transition: color 0.2s, transform 0.1s;
+}
+
+/* Cuando queda poco tiempo, el contador se pone rojo y late */
+#temporizador.urgente {
+  color: #ff3b3b;
+  animation: latido 0.5s infinite;
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.25);
+  }
+}
+
+/* Nivel actual (arriba a la izquierda) */
+#nivel {
+  position: fixed;
+  top: 30px;
+  left: 30px;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #ffe14d;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 8px 16px;
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Progreso de pases (arriba a la izquierda, debajo del nivel) */
+#progreso {
+  position: fixed;
+  top: 78px;
+  left: 30px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 8px 16px;
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Instrucciones (abajo, centrado) */
+#instrucciones {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 10px 20px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+/* Barra de estamina de salto (arriba de las instrucciones) */
+#estamina-cont {
+  position: fixed;
+  bottom: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#estamina-label {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 1px;
+}
+
+#estamina-barra {
+  width: 220px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+#estamina-fill {
+  height: 100%;
+  width: 100%;
+  background: #ff9500; /* naranja mientras se recarga */
+  border-radius: 999px;
+  transition: width 0.05s linear;
+}
+
+/* Cuando está llena (lista para saltar) se pone verde y brilla */
+#estamina-fill.lista {
+  background: #4dff88;
+  box-shadow: 0 0 12px #4dff88;
+}
+
+/* Flash de pantalla completa (para la explosión roja de derrota) */
+#flash {
+  position: fixed;
+  inset: 0;
+  background: #ff0000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
+  transition: opacity 0.1s;
+}
+
+/* Pantalla de fin de juego */
+#pantalla-fin {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 30;
+  text-align: center;
+}
+
+#pantalla-fin.oculto {
+  display: none;
+}
+
+#fin-titulo {
+  font-size: 6rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.7);
+  animation: aparecer 0.4s ease-out;
+}
+
+#fin-subtitulo {
+  font-size: 2rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 20px;
+}
+
+/* Colores según resultado (se agregan estas clases por JS) */
+#pantalla-fin.victoria #fin-titulo {
+  color: #4dff88;
+}
+#pantalla-fin.derrota #fin-titulo {
+  color: #ff3b3b;
+}
+
+#boton-reiniciar {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0b0b12;
+  background: #ffffff;
+  border: none;
+  padding: 16px 40px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+
+#boton-reiniciar:hover {
+  transform: scale(1.05);
+  background: #ffe14d;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

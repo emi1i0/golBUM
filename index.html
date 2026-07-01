@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GolBUM — El pase contrarreloj</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- Three.js dibuja acá. -->
+    <canvas id="escena"></canvas>
+
+    <!-- ===================== HUD (interfaz 2D encima del 3D) ===================== -->
+
+    <!-- Contador gigante -->
+    <div id="temporizador">10</div>
+
+    <!-- Nivel actual -->
+    <div id="nivel">Nivel 1</div>
+
+    <!-- Progreso de pases -->
+    <div id="progreso">Pase 1 / 4</div>
+
+    <!-- Barra de estamina de salto -->
+    <div id="estamina-cont">
+      <span id="estamina-label">SALTO</span>
+      <div id="estamina-barra"><div id="estamina-fill"></div></div>
+    </div>
+
+    <!-- Instrucciones -->
+    <div id="instrucciones">
+      <strong>WASD</strong> mover &nbsp;•&nbsp; <strong>ESPACIO</strong> saltar (necesitás la barra llena) &nbsp;•&nbsp; esquivá a los rivales rojos &nbsp;•&nbsp; llegá al delantero a tiempo
+    </div>
+
+    <!-- Flash de color (rojo derrota) -->
+    <div id="flash"></div>
+
+    <!-- Pantalla de fin de juego (victoria o derrota) -->
+    <div id="pantalla-fin" class="oculto">
+      <h1 id="fin-titulo">¡GOOOL!</h1>
+      <p id="fin-subtitulo">Nivel Completado</p>
+      <button id="boton-reiniciar">Volver a intentar</button>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
