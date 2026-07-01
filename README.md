@@ -5,8 +5,9 @@ y [Vite](https://vitejs.dev/).
 
 Controlás una pelota de fútbol. Tenés que ir tocando a cada compañero
 **en orden** (los pases) antes de que se acabe el tiempo, hasta llegar
-al **delantero**, que dispara solo al arco para el **gol explosivo**.
-Si el reloj llega a 0 antes... 💥 explota todo.
+al **delantero**. Ahí se define un **PENAL**: cronometrás una mira que
+barre el arco y pateás para meter el **gol explosivo**, esquivando al
+arquero. Si el reloj llega a 0 antes... 💥 explota todo.
 
 ## Cómo jugar
 
@@ -24,8 +25,11 @@ Abrí la URL que aparece en la terminal (normalmente `http://localhost:5173`).
   apretar) y consume la **barra de estamina**: solo saltás con la barra llena
   (verde). Esto evita el bunny-hop.
 - Llevá la pelota hasta el compañero marcado con el **anillo amarillo**.
-- Cuando toques al **delantero** (la cápsula naranja), la pelota
-  sale disparada sola al arco.
+- Cuando toques al **delantero** (la cápsula naranja), arranca el **penal**:
+  una **mira luminosa** barre el arco de lado a lado. Apretá **ESPACIO** en el
+  momento justo para patear hacia ahí. El **arquero** (cápsula celeste) se
+  lanza a atajar, así que buscá el ángulo. Si te la atajan o tirás afuera,
+  la pelota vuelve y podés patear de nuevo hasta que se acabe el tiempo del penal.
 - El botón **"Volver a intentar"** reinicia el nivel.
 
 ### Obstáculos
@@ -81,7 +85,7 @@ Casi todo se cambia desde **`src/config.js`** sin tocar la lógica:
 | ------------------ | --------------------------------------------- |
 | `LEVELS`           | los niveles: tiempo, arranque y compañeros    |
 | `BALL_SPEED`       | velocidad de la pelota al controlarla         |
-| `SHOOT_SPEED`      | velocidad del tiro final                      |
+| `PENAL`            | parámetros del penal (arquero, mira, tiempo)  |
 | `INFLUENCE_RADIUS` | qué tan cerca hay que estar para "pasar"      |
 | `CAMERA_OFFSET`    | ángulo/altura de la cámara                    |
 | `CAMERA_LERP`      | qué tan suave sigue la cámara (0–1)           |
@@ -97,9 +101,14 @@ Cada entrada de `LEVELS` tiene:
 Copiá una entrada y modificala para crear un nivel nuevo.
 
 **El `time` no se pone a ojo:** corré `node tools/sim-tiempos.mjs`, que simula
-un run óptimo del nivel y sugiere el tiempo límite (óptimo × 1.7, un factor que
-modela a un jugador promedio). Cambiaste posiciones/obstáculos/rivales → volvé a
-correrlo y copiá el valor sugerido.
+un run óptimo del nivel y sugiere el tiempo límite (óptimo × `1.3`, el factor que
+modela el colchón para un jugador promedio). Cambiaste posiciones/obstáculos/rivales
+→ volvé a correrlo y copiá el valor sugerido.
+
+**El penal también se balancea con simulación:** `node tools/sim-penal.mjs` corre
+miles de penales por nivel (con un "jugador" bueno y uno flojo) y reporta la
+probabilidad de gol, los intentos y el tiempo usado. Sirve para tunear `PENAL` y
+`penalDeNivel()` sin que ningún nivel quede imposible ni regalado.
 
 ## Ideas para seguir
 

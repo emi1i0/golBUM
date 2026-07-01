@@ -32,11 +32,15 @@ const camara = new THREE.PerspectiveCamera(
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace; // salida en sRGB => colores correctos
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-// Luz ambiente suave + un "sol" que proyecta sombras.
-escena.add(new THREE.AmbientLight(0xffffff, 0.6));
+// Luz hemisférica (cielo/suelo): para un escenario exterior queda mejor que
+// un ambiente plano. Baja celeste desde arriba y verde reflejado del pasto
+// desde abajo, dándole aire de cancha al aire libre.
+escena.add(new THREE.HemisphereLight(0x88c6ff, 0x2f7a34, 0.85));
+// El "sol": luz direccional que proyecta las sombras.
 const sol = new THREE.DirectionalLight(0xffffff, 1.8);
 sol.position.set(20, 40, 20);
 sol.castShadow = true;
@@ -46,6 +50,8 @@ sol.shadow.camera.right = 60;
 sol.shadow.camera.top = 60;
 sol.shadow.camera.bottom = -60;
 sol.shadow.camera.far = 120;
+sol.shadow.bias = -0.0001; // corrige el "shadow acne" (rayado en las sombras)
+sol.shadow.normalBias = 0.02; // corrige artefactos en superficies curvas/inclinadas
 escena.add(sol);
 
 // ------------------------------------------------------------
@@ -63,8 +69,12 @@ function crearTexturaCancha() {
     ctx.fillRect(0, i * 32, 64, 32);
   }
   const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace; // es un mapa de color (albedo) => sRGB
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(1, 1);
+  // Filtrado anisotrópico: la cancha se ve en ángulo rasante; sin esto, las
+  // franjas del pasto se emborronan hacia el fondo. Con esto quedan nítidas.
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return tex;
 }
 
@@ -84,7 +94,9 @@ function crearTexturaPelota() {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
-  return new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace; // mapa de color (albedo) => sRGB
+  return tex;
 }
 
 // ------------------------------------------------------------
@@ -137,7 +149,7 @@ barraBlanca(G, 12, 12, CONF.GOAL_Z + 6); // lado der
 // ------------------------------------------------------------
 const grupoArco = new THREE.Group();
 const matPoste = new THREE.MeshStandardMaterial({ color: 0xffffff });
-const radioPoste = 0.3;
+const radioPoste = CONF.POSTE_RADIO;
 const medioAncho = CONF.GOAL_WIDTH / 2;
 
 // Postes verticales
@@ -340,12 +352,59 @@ function construirRivales(lista = []) {
 }
 
 // ------------------------------------------------------------
+//  PENAL: arquero + mira (se crean al llegar al delantero).
+// ------------------------------------------------------------
+let arquero = null; // { mesh }
+let mira = null; // esfera brillante que barre el arco
+
+function construirPenal() {
+  destruirPenal();
+  // Arquero: cápsula con "buzo" celeste-verdoso (distinto de rivales rojos).
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.85, 1.7, 6, 16),
+    new THREE.MeshStandardMaterial({ color: 0x18d6c4 })
+  );
+  mesh.position.set(0, 1.55, CONF.GOAL_Z + 0.6);
+  mesh.castShadow = true;
+  escena.add(mesh);
+  arquero = { mesh };
+
+  // Mira: esfera luminosa que indica dónde va a ir el tiro.
+  mira = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55, 16, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0xffef5c,
+      emissive: 0xffcc00,
+      emissiveIntensity: 0.9,
+    })
+  );
+  mira.position.set(0, CONF.GOAL_HEIGHT * 0.5, CONF.GOAL_Z + 0.3);
+  escena.add(mira);
+}
+
+function destruirPenal() {
+  if (arquero) {
+    escena.remove(arquero.mesh);
+    arquero.mesh.geometry.dispose();
+    arquero.mesh.material.dispose();
+    arquero = null;
+  }
+  if (mira) {
+    escena.remove(mira);
+    mira.geometry.dispose();
+    mira.material.dispose();
+    mira = null;
+  }
+}
+
+// ------------------------------------------------------------
 //  HUD (referencias al DOM)
 // ------------------------------------------------------------
 const hud = {
   temporizador: document.querySelector('#temporizador'),
   nivel: document.querySelector('#nivel'),
   progreso: document.querySelector('#progreso'),
+  estaminaCont: document.querySelector('#estamina-cont'),
   estaminaFill: document.querySelector('#estamina-fill'),
   flash: document.querySelector('#flash'),
   pantallaFin: document.querySelector('#pantalla-fin'),
@@ -357,14 +416,27 @@ const hud = {
 // ------------------------------------------------------------
 //  ESTADO DEL JUEGO
 // ------------------------------------------------------------
-let estado; // 'jugando' | 'disparando' | 'ganado' | 'perdido'
+let estado; // 'jugando' | 'penal' | 'ganado' | 'perdido'
 let nivelActual = 0; // índice dentro de CONF.LEVELS
 let tiempoRestante;
 let objetivoActual; // índice del compañero al que hay que llegar
 let bursts = []; // explosiones de partículas activas
-let dirTiro = new THREE.Vector3(); // dirección del tiro final
 let tiempoExplosion = 0; // cronómetro de la animación de explosión
 let tiempoVictoria = 0; // demora antes de mostrar el cartel de gol
+let motivoDerrota = 'Se acabó el tiempo'; // subtítulo contextual de la derrota
+
+// --- Penal (evento final) ---
+let penalCfg = null; // { keeperVel, reticuleVel, tiempo } del nivel
+let penalTiempo = 0; // segundos que quedan para convertir
+let penalSub = 'apuntando'; // 'apuntando' | 'volando'
+let penalArmado = true; // edge-trigger: hay que soltar ESPACIO entre pateadas
+let reticuleX = 0; // posición de la mira sobre el arco
+let reticuleDir = 1; // sentido del barrido de la mira
+let penalShotX = 0; // x elegido al patear
+let penalVueloT = 0; // progreso del vuelo del tiro (hasta la línea)
+let penalNetT = 0; // progreso del ingreso a la red (tras un gol)
+let keeperReac = 0; // cronómetro de reacción del arquero
+const penalOrigen = new THREE.Vector3(); // desde dónde sale el tiro
 let velX = 0; // velocidad horizontal en X (inercia)
 let velZ = 0; // velocidad horizontal en Z (inercia)
 let velY = 0; // velocidad vertical de la pelota (para el salto)
@@ -399,6 +471,11 @@ function empezarNivel() {
   enElSuelo = true;
   estamina = 1;
   saltoArmado = true;
+  motivoDerrota = 'Se acabó el tiempo';
+
+  // Sacar el arquero/mira si venían de un penal anterior y mostrar la estamina.
+  destruirPenal();
+  hud.estaminaCont.style.display = '';
 
   // Limpiar partículas
   bursts.forEach((b) => b.dispose());
@@ -443,8 +520,11 @@ const teclas = new Set();
 window.addEventListener('keydown', (e) => teclas.add(e.key.toLowerCase()));
 window.addEventListener('keyup', (e) => {
   teclas.delete(e.key.toLowerCase());
-  // Al soltar ESPACIO, el salto queda "armado" para el próximo apretón.
-  if (e.key === ' ') saltoArmado = true;
+  // Al soltar ESPACIO, el salto (y la pateada del penal) quedan "armados".
+  if (e.key === ' ') {
+    saltoArmado = true;
+    penalArmado = true;
+  }
 });
 
 // El botón de fin de juego: si ganaste avanza de nivel, si perdiste reintenta.
@@ -536,21 +616,30 @@ function actualizarCamara() {
 // ------------------------------------------------------------
 //  TRANSICIONES DE ESTADO
 // ------------------------------------------------------------
-function iniciarTiro() {
-  estado = 'disparando';
-  hud.progreso.textContent = '¡AL ARCO!';
-  hud.temporizador.classList.remove('urgente');
-  // Aterrizamos la pelota para un tiro limpio.
-  pelota.position.y = CONF.BALL_RADIUS;
-  velY = 0;
+function iniciarPenal() {
+  estado = 'penal';
+  penalCfg = CONF.penalDeNivel(nivelActual);
+  penalTiempo = penalCfg.tiempo;
+  penalSub = 'apuntando';
+  penalArmado = !teclas.has(' '); // si venías tocando ESPACIO, soltá primero
+  reticuleX = 0;
+  reticuleDir = 1;
+
+  // Pelota al punto de penal, quieta y en el piso.
+  pelota.position.set(CONF.PENAL.spot.x, CONF.BALL_RADIUS, CONF.PENAL.spot.z);
+  velX = velZ = velY = 0;
   enElSuelo = true;
-  // Dirección hacia el centro del arco.
-  const destino = new THREE.Vector3(0, CONF.BALL_RADIUS, CONF.GOAL_Z);
-  dirTiro.copy(destino).sub(pelota.position).normalize();
+
+  construirPenal();
+  hud.estaminaCont.style.display = 'none';
+  hud.progreso.textContent = '¡PENAL! ESPACIO para patear';
+  hud.temporizador.classList.remove('urgente');
+  Sonido.silbato();
 }
 
 function marcarGol() {
   estado = 'ganado';
+  destruirPenal(); // sacar arquero y mira
   tiempoVictoria = 0.8; // demora para disfrutar las partículas antes del cartel
   sacudida = 1.2;
   Sonido.gol();
@@ -571,6 +660,7 @@ function marcarGol() {
 
 function perder() {
   estado = 'perdido';
+  destruirPenal(); // por si venías de un penal
   tiempoExplosion = 0;
   Sonido.explosion();
   // Flash rojo
@@ -605,7 +695,7 @@ function mostrarPantallaFin(victoria) {
     }
   } else {
     hud.finTitulo.textContent = 'GAME OVER';
-    hud.finSubtitulo.textContent = 'Se acabó el tiempo';
+    hud.finSubtitulo.textContent = motivoDerrota;
     hud.botonReiniciar.textContent = 'Volver a intentar';
   }
 }
@@ -685,6 +775,7 @@ function updateJugando(dt) {
     const dx = pelota.position.x - r.mesh.position.x;
     const dz = pelota.position.z - r.mesh.position.z;
     if (Math.hypot(dx, dz) < 1.1 + CONF.BALL_RADIUS) {
+      motivoDerrota = '¡Te tocó un rival!';
       perder();
       return;
     }
@@ -704,6 +795,7 @@ function updateJugando(dt) {
         Math.abs(pelota.position.z - o.z) < o.hz + CONF.BALL_RADIUS;
     }
     if (chocaXZ && abajoDeLaPelota < o.tope - 0.15) {
+      motivoDerrota = '¡Chocaste un obstáculo!';
       perder();
       return;
     }
@@ -726,7 +818,7 @@ function updateJugando(dt) {
     obj.mesh.position.y = 1.5;
 
     if (obj.esDelantero) {
-      iniciarTiro();
+      iniciarPenal();
     } else {
       Sonido.pase();
       objetivoActual++;
@@ -736,14 +828,114 @@ function updateJugando(dt) {
   actualizarHUD();
 }
 
-function updateDisparando(dt) {
-  moverPelota({
-    x: dirTiro.x * CONF.SHOOT_SPEED * dt,
-    z: dirTiro.z * CONF.SHOOT_SPEED * dt,
-  });
-  // ¿Cruzó la línea de gol dentro de los postes?
-  if (pelota.position.z <= CONF.GOAL_Z && Math.abs(pelota.position.x) < medioAncho) {
-    marcarGol();
+function updatePenal(dt) {
+  penalTiempo -= dt;
+  // Si el tiempo se acaba pero la pelota YA está entrando a la red, es gol igual.
+  if (penalTiempo <= 0 && penalSub !== 'entrando') {
+    penalTiempo = 0;
+    hud.temporizador.textContent = 0;
+    motivoDerrota = '¡No convertiste el penal!';
+    perder();
+    return;
+  }
+  penalTiempo = Math.max(0, penalTiempo);
+  hud.temporizador.textContent = Math.ceil(penalTiempo);
+  hud.temporizador.classList.toggle('urgente', penalTiempo <= 3);
+
+  if (penalSub === 'entrando') {
+    // El gol ya está decidido: la pelota TRASPASA la línea y entra a la red.
+    penalNetT += dt;
+    const q = Math.min(1, penalNetT / 0.2);
+    const antes = pelota.position.clone();
+    pelota.position.x = penalShotX;
+    pelota.position.z = CONF.GOAL_Z - q * CONF.PENAL.netDepth;
+    rodar(pelota.position.x - antes.x, pelota.position.z - antes.z);
+    if (q >= 1) marcarGol();
+    return;
+  }
+
+  // La mira barre UN POCO MÁS que el ancho del arco: apuntar muy al ángulo
+  // puede irse AFUERA (ese es el riesgo que balancea pegarle cerca del palo).
+  const limite = CONF.GOAL_WIDTH / 2 + 1.3;
+
+  if (penalSub === 'apuntando') {
+    // La mira barre de lado a lado del arco.
+    reticuleX += reticuleDir * penalCfg.reticuleVel * dt;
+    if (reticuleX >= limite) {
+      reticuleX = limite;
+      reticuleDir = -1;
+    } else if (reticuleX <= -limite) {
+      reticuleX = -limite;
+      reticuleDir = 1;
+    }
+    mira.position.x = reticuleX;
+    // El arquero espera casi centrado (leve vaivén): su fuerza es la reacción.
+    arquero.mesh.position.x = 0.5 * Math.sin(performance.now() / 500);
+
+    // ¡Patear! (edge-triggered: hay que soltar ESPACIO entre pateadas)
+    if (teclas.has(' ') && penalArmado) {
+      penalArmado = false;
+      penalSub = 'volando';
+      penalShotX = reticuleX;
+      penalVueloT = 0;
+      keeperReac = 0;
+      penalOrigen.copy(pelota.position);
+      Sonido.patear();
+    }
+    return;
+  }
+
+  // penalSub === 'volando': el tiro viaja al arco (interpolado, con parábola).
+  penalVueloT += dt;
+  const prog = Math.min(1, penalVueloT / CONF.PENAL.flightTime);
+  const destino = new THREE.Vector3(penalShotX, CONF.GOAL_HEIGHT * 0.45, CONF.GOAL_Z);
+  const antes = pelota.position.clone();
+  pelota.position.lerpVectors(penalOrigen, destino, prog);
+  pelota.position.y += Math.sin(prog * Math.PI) * 1.5; // arco del disparo
+  rodar(pelota.position.x - antes.x, pelota.position.z - antes.z);
+  mira.position.x = pelota.position.x; // la mira acompaña al tiro
+
+  // El arquero reacciona: tras `reaccion`, se lanza hacia el punto del tiro.
+  keeperReac += dt;
+  if (keeperReac > CONF.PENAL.reaccion) {
+    const paso = penalCfg.keeperVel * dt;
+    const objetivoArq = THREE.MathUtils.clamp(penalShotX, -CONF.GOAL_WIDTH / 2, CONF.GOAL_WIDTH / 2);
+    const dx = objetivoArq - arquero.mesh.position.x;
+    arquero.mesh.position.x += THREE.MathUtils.clamp(dx, -paso, paso);
+  }
+
+  if (prog >= 1) {
+    const ax = Math.abs(penalShotX);
+    const medioArco = CONF.GOAL_WIDTH / 2;
+    // Gol LIMPIO sólo si la pelota pasa POR DENTRO del poste (contando ambos radios).
+    const clearGol = medioArco - CONF.POSTE_RADIO - CONF.BALL_RADIUS;
+
+    let resultado; // 'gol' | 'atajada' | 'palo' | 'afuera'
+    if (ax >= medioArco) resultado = 'afuera';
+    else if (ax > clearGol) resultado = 'palo';
+    else {
+      const alcanza = Math.abs(arquero.mesh.position.x - penalShotX) < CONF.PENAL.saveReach;
+      resultado = alcanza ? 'atajada' : 'gol';
+    }
+
+    if (resultado === 'gol') {
+      // La pelota sigue de largo: cruza la línea y entra a la red ('entrando').
+      penalSub = 'entrando';
+      penalNetT = 0;
+    } else {
+      // Palo / afuera / atajada: rebota y, si queda tiempo, se vuelve a patear.
+      if (resultado === 'palo') Sonido.palo();
+      else if (resultado === 'atajada') Sonido.atajada();
+      penalSub = 'apuntando';
+      penalArmado = !teclas.has(' ');
+      pelota.position.set(CONF.PENAL.spot.x, CONF.BALL_RADIUS, CONF.PENAL.spot.z);
+      hud.progreso.textContent =
+        resultado === 'palo'
+          ? '¡Al palo! Volvé a patear'
+          : resultado === 'afuera'
+            ? '¡Afuera! Volvé a patear'
+            : '¡La atajó! Volvé a patear';
+    }
   }
 }
 
@@ -779,7 +971,7 @@ function loop(ahora) {
   ultimoTiempo = ahora;
 
   if (estado === 'jugando') updateJugando(dt);
-  else if (estado === 'disparando') updateDisparando(dt);
+  else if (estado === 'penal') updatePenal(dt);
   else if (estado === 'perdido') updatePerdido(dt);
   else if (estado === 'ganado') updateGanado(dt);
 

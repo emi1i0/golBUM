@@ -10,8 +10,9 @@ export const FIELD_HALF_Z = 45;   // largo de la cancha (mitad, hacia cada extre
 
 // --- Arco (está en el extremo -Z) ---
 export const GOAL_Z = -42;        // posición del arco sobre el eje Z
-export const GOAL_WIDTH = 16;     // ancho entre los postes
+export const GOAL_WIDTH = 16;     // ancho entre los postes (de centro a centro de poste)
 export const GOAL_HEIGHT = 6;     // alto del arco
+export const POSTE_RADIO = 0.3;   // radio de los postes (para la detección de gol/palo)
 
 // --- Pelota ---
 export const BALL_RADIUS = 1;
@@ -20,7 +21,6 @@ export const BALL_SPEED = 20;     // velocidad MÁXIMA al controlarla (unidades/
 // Más alto = más responsiva; más bajo = más "patinadora".
 export const BALL_ACCEL = 8;      // aceleración al apretar una tecla
 export const BALL_FRICTION = 3;   // frenado al soltar (baja => se desliza más)
-export const SHOOT_SPEED = 75;    // velocidad del tiro final al arco
 export const JUMP_SPEED = 14;     // impulso vertical del salto (alto)
 export const GRAVITY = 55;        // gravedad alta => salto "seco", arco corto y contundente
 export const SALTO_COOLDOWN = 1.3; // segundos que tarda en recargarse la estamina de salto
@@ -31,6 +31,33 @@ export const CAMERA_LERP = 0.07;  // 0 = no sigue, 1 = pegada. Suavidad del segu
 
 // --- Jugadores / pases ---
 export const INFLUENCE_RADIUS = 3.5; // qué tan cerca hay que estar para "tocar" al compañero
+
+// --- Penal (el evento final: tocás al delantero y hay que convertir) ---
+//  Al llegar al delantero, la escena pasa a modo penal: la pelota va al punto,
+//  una MIRA barre el arco y un ARQUERO se estira para atajar. Apretás ESPACIO
+//  para patear hacia donde está la mira. Tenés varios intentos hasta que se
+//  acabe el `tiempo` del penal.
+export const PENAL = {
+  spot: { x: 0, z: GOAL_Z + 11 }, // punto de penal (frente al arco)
+  flightTime: 0.5,   // segundos que tarda el disparo en llegar a la línea
+  netDepth: 2.6,     // cuánto entra la pelota a la red en un gol (profundidad)
+  saveReach: 2.4,    // alcance del arquero (medio cuerpo + estirada) para atajar
+  reaccion: 0.15,    // demora de reacción del arquero antes de lanzarse
+  reticuleBase: 7,   // velocidad de barrido de la mira (unidades/seg), nivel 1
+  keeperBase: 6,     // velocidad del arquero al estirarse (unidades/seg), nivel 1
+  tiempoBase: 9,     // segundos para convertir el penal (varios intentos), nivel 1
+  resetDelay: 0.6,   // pausa tras una atajada antes de rearmar el próximo tiro
+};
+
+// Dificultad del penal según el índice de nivel (0..). El arquero y la mira se
+// aceleran y baja el tiempo. Afinado con `node tools/sim-penal.mjs`.
+export function penalDeNivel(i) {
+  return {
+    keeperVel: PENAL.keeperBase + i * 0.7,     // arquero más rápido (achica el ángulo)
+    reticuleVel: PENAL.reticuleBase + i * 0.8, // mira más veloz => timing más difícil
+    tiempo: Math.max(6, PENAL.tiempoBase - i * 0.5),
+  };
+}
 
 // ============================================================
 //  NIVELES

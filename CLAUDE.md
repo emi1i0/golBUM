@@ -42,8 +42,8 @@ tools/
 
 - **Idioma:** todo el código, comentarios e identificadores están en **español**
   (ej. `pelota`, `companeros`, `empezarNivel`, `sacudida`). Mantener esa convención.
-- **Máquina de estados** en `main.js`: `estado` ∈ `'jugando' | 'disparando' | 'ganado' | 'perdido'`.
-  El `loop()` delega a `updateJugando/Disparando/Perdido/Ganado` según el estado.
+- **Máquina de estados** en `main.js`: `estado` ∈ `'jugando' | 'penal' | 'ganado' | 'perdido'`.
+  El `loop()` delega a `updateJugando/Penal/Perdido/Ganado` según el estado.
 - **Game loop** basado en `requestAnimationFrame` con delta-time (`dt`) limitado a
   0.05s. Todo el movimiento se escala por `dt` (unidades/segundo).
 - **Coordenadas:** cancha sobre el plano XZ. El arco está en **-Z** (`GOAL_Z`).
@@ -55,8 +55,19 @@ tools/
   (`1 - e^(-ritmo·dt)`, independiente de FPS): acelera con `BALL_ACCEL` al haber input
   y frena con `BALL_FRICTION` al soltar (glide). `BALL_SPEED` es el tope de velocidad.
 - **Detección de pases:** por distancia en XZ contra el compañero objetivo
-  (`INFLUENCE_RADIUS`), no hay motor de física. El tiro final y la detección de gol
-  también son cinemática simple + chequeo de línea de gol.
+  (`INFLUENCE_RADIUS`), no hay motor de física.
+- **Evento PENAL (clímax):** al tocar al delantero se entra al estado `'penal'`
+  (`iniciarPenal` construye arquero + mira con `construirPenal`). Una **mira** barre
+  el arco (barre un poco MÁS que los palos: pegarle al ángulo puede irse afuera), el
+  jugador patea con ESPACIO (edge-triggered, `penalArmado`) hacia donde está la mira, y
+  el **arquero** —casi centrado— reacciona tras `PENAL.reaccion` y se lanza a
+  `keeperVel·dt` hacia el tiro. Al cruzar la línea se decide la **zona** por `|x|`:
+  **afuera** (`|x| ≥ GOAL_WIDTH/2`), **palo** (entre el poste y el gol limpio: la pelota
+  toca el poste, contando `POSTE_RADIO` + `BALL_RADIUS`), o **gol/atajada** dentro del
+  gol limpio según si el arquero llega (`saveReach`). En el gol, la pelota TRASPASA la
+  línea y entra a la red (sub-estado `'entrando'`) antes de festejar. Palo/afuera/atajada
+  => se vuelve a patear hasta que se agota `PENAL.tiempo`. Todo es cinemática simple; sin
+  motor de física. La dificultad sale de `penalDeNivel(i)` en `config.js`.
 - **Salto:** física vertical propia (`velY` + `GRAVITY` alta = arco seco), solo eje Y.
   Es edge-triggered (`saltoArmado`: hay que soltar ESPACIO entre saltos) y gasta una
   **estamina** (`estamina` 0..1, recarga en `SALTO_COOLDOWN`); solo se salta con la
@@ -68,8 +79,13 @@ tools/
   rivales o patrullan con `sin()` sobre un eje, o **persiguen** la pelota si
   `persigue:true` (velocidad en unidades/seg); explotan al tocarlos en XZ a cualquier
   altura. Todas las colisiones se chequean en `updateJugando`.
-- **Sin assets externos:** las texturas (césped, pelota) se dibujan en un `<canvas>`
-  en memoria (`crearTexturaCancha`, `crearTexturaPelota`) y los sonidos se sintetizan.
+- **Sin assets externos (PILAR DE DISEÑO):** el juego es 100% procedural y funciona
+  offline: las texturas (césped, pelota) se dibujan en un `<canvas>` en memoria
+  (`crearTexturaCancha`, `crearTexturaPelota`), la geometría sale de las primitivas de
+  Three (cápsulas, cilindros, conos...) y los sonidos se sintetizan con Web Audio.
+  **Toda feature nueva debe mantener esto:** nada de `.glb`/`.png`/`.mp3` ni loaders
+  externos. Si algo "pide" un asset, resolverlo de forma procedural (canvas, shaders,
+  geometría primitiva, síntesis). Es parte de la identidad del proyecto, no una limitación.
 - **HUD:** es DOM/CSS (elementos en `index.html`), no se dibuja en el canvas. `main.js`
   guarda referencias en el objeto `hud` y las actualiza.
 
@@ -83,6 +99,14 @@ tools/
   El `FACTOR` está en `1.3` (afinado por playtesting: deja ~2s de colchón sobre el óptimo).
   Tras cambiar posiciones/obstáculos/rivales de un nivel, volver a correrlo y copiar el
   valor sugerido al `time` del nivel. Cambiar el `FACTOR` reajusta la dificultad global.
+- **Balancear el PENAL:** las constantes base están en `PENAL` y el escalado por nivel
+  en `penalDeNivel(i)` (ambos en `config.js`). NO tunear a ojo: correr
+  `node tools/sim-penal.mjs`, que hace Monte Carlo (20k tiros/nivel) con un "jugador AI"
+  bueno y uno flojo y reporta P(gol), intentos y tiempo por nivel. Objetivo: que el penal
+  sea **ganable** (el bueno ~100%, es la recompensa) pero que el flojo sufra en niveles
+  altos. **Gotcha del modelo:** la mira del juego barre MÁS que los palos (`limite` en
+  `updatePenal`) para que exista el riesgo de "afuera"; si la topás dentro de los palos,
+  el evento deja de coincidir con el simulador y niveles altos pueden volverse imposibles.
 - **Velocidades, cámara, tamaño de cancha, arco:** constantes en `config.js`.
 - **Nuevos efectos de sonido:** agregar funciones en `sounds.js` usando los helpers
   `tono()` / `ruido()`; llamarlas desde las transiciones de estado en `main.js`.

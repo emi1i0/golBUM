@@ -55,6 +55,10 @@ export class ParticleBurst {
     });
 
     this.puntos = new THREE.Points(geometria, this.material);
+    // Todas las partículas nacen en el mismo punto, así que la esfera de
+    // recorte queda diminuta en el origen y Three podría "cullear" (ocultar)
+    // la explosión entera al dispersarse. La desactivamos: siempre se dibuja.
+    this.puntos.frustumCulled = false;
     escena.add(this.puntos);
   }
 

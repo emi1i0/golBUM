@@ -92,6 +92,27 @@ export function salto() {
   tono({ freq: 300, tipo: 'sine', duracion: 0.18, volumen: 0.22, freqFinal: 700 });
 }
 
+// Pateo del penal: golpe seco y corto (impacto contra la pelota).
+export function patear() {
+  desbloquear();
+  tono({ freq: 220, tipo: 'square', duracion: 0.09, volumen: 0.3, freqFinal: 110 });
+  ruido({ duracion: 0.08, volumen: 0.28, tipoFiltro: 'lowpass', freqFiltro: 500 });
+}
+
+// Palo: golpe metálico seco contra el poste (¡tan!).
+export function palo() {
+  desbloquear();
+  tono({ freq: 1200, tipo: 'square', duracion: 0.12, volumen: 0.28, freqFinal: 700 });
+  tono({ freq: 1800, tipo: 'square', duracion: 0.08, volumen: 0.14 });
+}
+
+// Atajada: "negado" descendente (el arquero manotea el tiro).
+export function atajada() {
+  desbloquear();
+  tono({ freq: 420, tipo: 'sawtooth', duracion: 0.22, volumen: 0.28, freqFinal: 130 });
+  ruido({ duracion: 0.12, volumen: 0.2, tipoFiltro: 'lowpass', freqFiltro: 900 });
+}
+
 // Gol: arpegio ascendente + rugido de la hinchada.
 export function gol() {
   desbloquear();
